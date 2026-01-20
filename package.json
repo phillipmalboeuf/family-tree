@@ -1,17 +1,37 @@
 {
-	"name": "family-tree",
-	"description": "Please enter a description for your extension",
+	"name": "@phillipmalboeuf/directus-interface-family-tree",
+	"description": "A Directus interface extension for visualizing family trees with parent-child and marriage relationships",
 	"icon": "extension",
 	"version": "1.0.0",
+	"license": "MIT",
+	"author": "Philip Malboeuf",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/phillipmalboeuf/family-tree.git"
+	},
+	"homepage": "https://github.com/phillipmalboeuf/family-tree#readme",
+	"bugs": {
+		"url": "https://github.com/phillipmalboeuf/family-tree/issues"
+	},
 	"keywords": [
 		"directus",
 		"directus-extension",
-		"directus-extension-interface"
+		"directus-extension-interface",
+		"family-tree",
+		"genealogy",
+		"family",
+		"tree"
 	],
 	"type": "module",
+	"main": "dist/index.js",
 	"files": [
-		"dist"
+		"dist",
+		"README.md",
+		"LICENSE"
 	],
+	"publishConfig": {
+		"access": "public"
+	},
 	"directus:extension": {
 		"type": "interface",
 		"path": "dist/index.js",
@@ -22,7 +42,8 @@
 		"build": "directus-extension build",
 		"dev": "directus-extension build -w --no-minify",
 		"link": "directus-extension link",
-		"validate": "directus-extension validate"
+		"validate": "directus-extension validate",
+		"prepublishOnly": "npm run build"
 	},
 	"devDependencies": {
 		"@directus/extensions-sdk": "17.0.5",
