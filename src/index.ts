@@ -4,9 +4,9 @@ import InterfaceComponent from './interface.vue';
 export default defineInterface({
 	id: 'family-tree',
 	name: 'Family Tree',
-	icon: 'box',
-	description: 'This is the family tree interface!',
+	icon: 'account_tree',
+	description: 'Visualize family trees with parent-child and marriage relationships',
 	component: InterfaceComponent,
 	options: null,
-	types: ['alias'],
+	types: ['uuid', 'string', 'integer', 'bigInteger', 'alias'],
 });

@@ -173,8 +173,8 @@ export default defineComponent({
 				}
 
 				// Try from attrs as fallback
-				if (!itemCollection && attrs?.collection) itemCollection = attrs.collection;
-				if (!itemPrimaryKey && attrs?.primaryKey) itemPrimaryKey = attrs.primaryKey;
+				if (!itemCollection && attrs?.collection) itemCollection = attrs.collection as string;
+				if (!itemPrimaryKey && attrs?.primaryKey) itemPrimaryKey = attrs.primaryKey as string | number;
 
 				if (!itemCollection || !itemPrimaryKey) {
 					throw new Error('No collection or primary key available. Make sure you are viewing a Person item.');
