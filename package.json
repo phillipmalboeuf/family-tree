@@ -2,7 +2,7 @@
 	"name": "@phillipmalboeuf/directus-interface-family-tree",
 	"description": "A Directus interface extension for visualizing family trees with parent-child and marriage relationships",
 	"icon": "extension",
-	"version": "1.0.1",
+	"version": "1.0.2",
 	"license": "MIT",
 	"author": "Philip Malboeuf",
 	"repository": {
