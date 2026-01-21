@@ -20,7 +20,7 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, ref, onMounted, watch, inject } from 'vue';
+import { defineComponent, ref, onMounted, watch, inject, getCurrentInstance, computed } from 'vue';
 import { useApi, useStores } from '@directus/extensions-sdk';
 
 interface Person {
@@ -62,7 +62,7 @@ const FamilyNode = defineComponent({
 			required: true,
 		},
 	},
-	setup(props) {
+	setup() {
 		function getPersonName(person: Person | null): string {
 			if (!person) return 'Unknown';
 			return (
@@ -137,9 +137,10 @@ export default defineComponent({
 	components: {
 		FamilyNode,
 	},
-	setup(props, { attrs }) {
+	setup(_props, { attrs }) {
 		const api = useApi();
 		const stores = useStores();
+		const instance = getCurrentInstance();
 		
 		const person = ref<Person | null>(null);
 		const loading = ref(true);
@@ -148,9 +149,27 @@ export default defineComponent({
 		const spouses = ref<Person[]>([]);
 		const collection = ref<string>('');
 
-		// Try to get collection from various sources
-		const currentCollection = inject<string>('collection', '');
-		const primaryKey = inject<string | number>('primaryKey', '');
+		// Try to get collection and primary key from various sources
+		const currentCollection = inject<string>('collection', null);
+		const primaryKey = inject<string | number>('primaryKey', null);
+		
+		// Try to get from route if available
+		const route = instance?.appContext.config.globalProperties.$route;
+		
+		// Extract collection and primary key from route if available
+		const routeCollection = computed(() => {
+			if (route?.params?.collection) {
+				return route.params.collection as string;
+			}
+			return null;
+		});
+		
+		const routePrimaryKey = computed(() => {
+			if (route?.params?.primaryKey) {
+				return route.params.primaryKey as string | number;
+			}
+			return null;
+		});
 
 		async function loadFamilyTree() {
 			try {
@@ -158,26 +177,48 @@ export default defineComponent({
 				error.value = null;
 
 				// Get collection and primary key - try multiple sources
-				let itemCollection = currentCollection;
-				let itemPrimaryKey = primaryKey;
+				let itemCollection: string | null = null;
+				let itemPrimaryKey: string | number | null = null;
 
-				// Try from stores if available
+				// Priority 1: Try from stores (most reliable)
 				if (stores) {
 					try {
 						const itemStore = stores.useItemStore?.();
 						if (itemStore?.collection) itemCollection = itemStore.collection;
 						if (itemStore?.primaryKey) itemPrimaryKey = itemStore.primaryKey;
-					} catch {
-						// Store not available, continue
+					} catch (err) {
+						console.warn('Could not access itemStore:', err);
 					}
 				}
 
-				// Try from attrs as fallback
+				// Priority 2: Try from inject
+				if (!itemCollection && currentCollection) itemCollection = currentCollection;
+				if (!itemPrimaryKey && primaryKey) itemPrimaryKey = primaryKey;
+
+				// Priority 3: Try from route
+				if (!itemCollection && routeCollection.value) itemCollection = routeCollection.value;
+				if (!itemPrimaryKey && routePrimaryKey.value) itemPrimaryKey = routePrimaryKey.value;
+
+				// Priority 4: Try from attrs
 				if (!itemCollection && attrs?.collection) itemCollection = attrs.collection as string;
 				if (!itemPrimaryKey && attrs?.primaryKey) itemPrimaryKey = attrs.primaryKey as string | number;
 
+				// Priority 5: Try parsing from window location
 				if (!itemCollection || !itemPrimaryKey) {
-					throw new Error('No collection or primary key available. Make sure you are viewing a Person item.');
+					const path = window.location.pathname;
+					const pathMatch = path.match(/\/content\/([^\/]+)\/([^\/]+)/);
+					if (pathMatch) {
+						if (!itemCollection) itemCollection = pathMatch[1];
+						if (!itemPrimaryKey) itemPrimaryKey = pathMatch[2];
+					}
+				}
+
+				if (!itemCollection) {
+					throw new Error('No collection available. Make sure you are viewing a Person item.');
+				}
+
+				if (!itemPrimaryKey) {
+					throw new Error('No primary key available. Make sure you are viewing a Person item.');
 				}
 
 				collection.value = itemCollection;
@@ -267,9 +308,13 @@ export default defineComponent({
 		}
 
 		// Watch for changes to the item
-		watch(() => primaryKey || currentCollection, () => {
-			loadFamilyTree();
-		}, { immediate: true });
+		watch(
+			() => [primaryKey, currentCollection, routePrimaryKey.value, routeCollection.value],
+			() => {
+				loadFamilyTree();
+			},
+			{ immediate: true }
+		);
 
 		onMounted(() => {
 			loadFamilyTree();
