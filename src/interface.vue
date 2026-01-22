@@ -1,130 +1,12 @@
 <template>
-	<div class="family-tree-interface">
-		<div v-if="loading" class="loading">
-			Loading family tree...
-		</div>
-		<div v-else-if="error" class="error">
-			{{ error }}
-		</div>
-		<div v-else-if="person" class="tree-container">
-			<family-node
-				:person="person"
-				:children="children"
-				:spouses="spouses"
-				:level="0"
-				:collection="collection"
-				:api="api"
-			/>
-		</div>
-	</div>
+	<pre v-if="loading">Loading...</pre>
+	<pre v-else-if="error">{{ error }}</pre>
+	<pre v-else>{{ jsonData }}</pre>
 </template>
 
 <script lang="ts">
 import { defineComponent, ref, onMounted, watch, inject, getCurrentInstance, computed } from 'vue';
 import { useApi, useStores } from '@directus/extensions-sdk';
-
-interface Person {
-	id: string;
-	name?: string;
-	first_name?: string;
-	last_name?: string;
-	children_father?: any[];
-	children_mother?: any[];
-	married_to?: any[];
-	[key: string]: any;
-}
-
-const FamilyNode = defineComponent({
-	name: 'FamilyNode',
-	props: {
-		person: {
-			type: Object as () => Person,
-			required: true,
-		},
-		children: {
-			type: Array as () => Person[],
-			default: () => [],
-		},
-		spouses: {
-			type: Array as () => Person[],
-			default: () => [],
-		},
-		level: {
-			type: Number,
-			default: 0,
-		},
-		collection: {
-			type: String,
-			required: true,
-		},
-		api: {
-			type: Object,
-			required: true,
-		},
-	},
-	setup() {
-		function getPersonName(person: Person | null): string {
-			if (!person) return 'Unknown';
-			return (
-				person.name ||
-				`${person.first_name || ''} ${person.last_name || ''}`.trim() ||
-				'Unnamed'
-			);
-		}
-
-		function getChildChildren(child: Person): Person[] {
-			const fatherChildren = child.children_father || [];
-			const motherChildren = child.children_mother || [];
-			const allChildren: Person[] = [];
-			const seenIds = new Set<string>();
-
-			[...fatherChildren, ...motherChildren].forEach((c: any) => {
-				const id = typeof c === 'string' ? c : c?.id;
-				if (id && !seenIds.has(id)) {
-					seenIds.add(id);
-					allChildren.push(typeof c === 'string' ? { id: c } : c);
-				}
-			});
-
-			return allChildren;
-		}
-
-		function getChildSpouses(child: Person): Person[] {
-			return child.married_to || [];
-		}
-
-		return {
-			getPersonName,
-			getChildChildren,
-			getChildSpouses,
-		};
-	},
-	template: `
-		<div class="family-node" :class="'level-' + level">
-			<div class="person-card">
-				<div class="person-name">{{ getPersonName(person) }}</div>
-				<div v-if="spouses.length > 0" class="spouses">
-					<span class="label">Spouse(s):</span>
-					<span v-for="(spouse, idx) in spouses" :key="spouse?.id || idx" class="spouse">
-						{{ getPersonName(spouse) }}{{ idx < spouses.length - 1 ? ', ' : '' }}
-					</span>
-				</div>
-			</div>
-			<div v-if="children.length > 0" class="children">
-				<family-node
-					v-for="child in children"
-					:key="child?.id || child"
-					:person="typeof child === 'string' ? { id: child } : child"
-					:children="getChildChildren(typeof child === 'string' ? { id: child } : child)"
-					:spouses="getChildSpouses(typeof child === 'string' ? { id: child } : child)"
-					:level="level + 1"
-					:collection="collection"
-					:api="api"
-				/>
-			</div>
-		</div>
-	`,
-});
 
 export default defineComponent({
 	name: 'FamilyTreeInterface',
@@ -134,24 +16,222 @@ export default defineComponent({
 			default: null,
 		},
 	},
-	components: {
-		FamilyNode,
-	},
 	setup(_props, { attrs }) {
 		const api = useApi();
 		const stores = useStores();
 		const instance = getCurrentInstance();
 		
-		const person = ref<Person | null>(null);
 		const loading = ref(true);
 		const error = ref<string | null>(null);
-		const children = ref<Person[]>([]);
-		const spouses = ref<Person[]>([]);
-		const collection = ref<string>('');
+		const jsonData = ref<string>('');
+
+		// Recursive function to load a person with all their relationships
+		async function loadPersonRecursive(
+			personId: string | number,
+			visitedPersons: Set<string>,
+			visitedMarriages: Set<number>,
+			marriageToPersonsMap: Map<number, any[]>,
+			depth: number = 0,
+			maxDepth: number = 5
+		): Promise<any> {
+			const personIdStr = String(personId);
+			
+			// Prevent infinite loops and limit depth
+			if (visitedPersons.has(personIdStr) || depth > maxDepth) {
+				return { id: personIdStr, _loaded: false, _reason: visitedPersons.has(personIdStr) ? 'already_visited' : 'max_depth' };
+			}
+			
+			visitedPersons.add(personIdStr);
+
+			try {
+				// Load person with basic relationships
+				const response = await api.get(`/items/persons/${personId}`, {
+					params: {
+						fields: [
+							'*',
+							'children_father.id',
+							'children_mother.id',
+							'marriages.*',
+						],
+					},
+				});
+
+				const person = response.data.data;
+				if (!person) {
+					return { id: personIdStr, _error: 'not_found' };
+				}
+
+
+				// Recursively load marriages
+				const marriages = person.marriages || [];
+				const loadedMarriages = await Promise.all(
+					marriages.map(async (marriage: any) => {
+						// The marriage object from persons.marriages.* is a junction table entry
+						// It has: id (junction ID), marriages_id (actual marriage ID), persons_id
+						// We need to use marriages_id, not id
+						const actualMarriageId = marriage?.marriages_id || marriage?.id || marriage;
+						
+						if (!actualMarriageId) {
+							return marriage;
+						}
+
+						// Check if we've already visited this marriage
+						const marriageIdNum = Number(actualMarriageId);
+						if (visitedMarriages.has(marriageIdNum)) {
+							return marriage;
+						}
+						visitedMarriages.add(marriageIdNum);
+
+						// Work with the marriage data we already have from the person's relationship
+						// Don't try to fetch from /items/marriages as we may not have permission
+						const fullMarriage = marriage;
+
+						// Query the marriages_persons junction table to get all persons in this marriage
+						// Use the actual marriage ID (marriages_id), not the junction table ID
+						let spouses: any[] = [];
+						
+						try {
+							// Query the junction table directly using marriages_id (the actual marriage ID)
+							const junctionResponse = await api.get('/items/marriages_persons', {
+								params: {
+									filter: {
+										marriages_id: {
+											_eq: marriageIdNum
+										}
+									},
+									fields: ['persons_id'],
+								},
+							});
+							
+							const junctionEntries = junctionResponse.data.data || [];
+							
+							// Get ALL person IDs from the junction table (including current person)
+							const allPersonIds = junctionEntries.map((entry: any) => entry.persons_id).filter((id: any) => id);
+							
+							// Filter out the current person to get spouse IDs
+							const spouseIds = allPersonIds.filter((id: any) => String(id) !== String(personId));
+							
+							// Load the spouse person data
+							if (spouseIds.length > 0) {
+								const spousesResponse = await api.get('/items/persons', {
+									params: {
+										filter: {
+											id: {
+												_in: spouseIds
+											}
+										},
+										fields: ['id', 'first_name', 'last_name'],
+									},
+								});
+								
+								spouses = spousesResponse.data.data || [];
+							}
+						} catch (err: any) {
+							// If junction table query fails, try using the spouses array from marriage if it exists
+							if (fullMarriage.spouses && Array.isArray(fullMarriage.spouses)) {
+								// The spouses array contains junction table IDs, so query those
+								const junctionIds = fullMarriage.spouses.filter((id: any) => id);
+								if (junctionIds.length > 0) {
+									try {
+										const junctionResponse = await api.get('/items/marriages_persons', {
+											params: {
+												filter: {
+													id: {
+														_in: junctionIds
+													}
+												},
+												fields: ['persons_id'],
+											},
+										});
+										
+										const junctionEntries = junctionResponse.data.data || [];
+										const spouseIds = junctionEntries
+											.map((entry: any) => entry.persons_id)
+											.filter((id: any) => id && String(id) !== String(personId));
+										
+										if (spouseIds.length > 0) {
+											const spousesResponse = await api.get('/items/persons', {
+												params: {
+													filter: {
+														id: {
+															_in: spouseIds
+														}
+													},
+													fields: ['id', 'first_name', 'last_name'],
+												},
+											});
+											
+											spouses = spousesResponse.data.data || [];
+										}
+									} catch (err2: any) {
+										// Fallback failed too
+									}
+								}
+							}
+						}
+
+						// Load all spouses recursively
+						const loadedSpouses = await Promise.all(
+							spouses.map(async (spouse: any) => {
+								const spouseId = spouse?.id || spouse;
+								if (!spouseId) return spouse;
+								
+								// Load spouse recursively (will handle both ID and full object cases)
+								return await loadPersonRecursive(spouseId, visitedPersons, visitedMarriages, marriageToPersonsMap, depth + 1, maxDepth);
+							})
+						);
+
+						return {
+							...fullMarriage,
+							spouses: loadedSpouses,
+						};
+					})
+				);
+
+				// Recursively load children
+				const fatherChildren = person.children_father || [];
+				const motherChildren = person.children_mother || [];
+				const allChildIds = new Set<string>();
+				
+				[...fatherChildren, ...motherChildren].forEach((child: any) => {
+					const childId = child?.id || child;
+					if (childId) {
+						allChildIds.add(String(childId));
+					}
+				});
+
+				const loadedChildren = await Promise.all(
+					Array.from(allChildIds).map(async (childId) => {
+						return await loadPersonRecursive(childId, visitedPersons, visitedMarriages, marriageToPersonsMap, depth + 1, maxDepth);
+					})
+				);
+
+				return {
+					...person,
+					marriages: loadedMarriages,
+					children_father: loadedChildren.filter((child: any) => {
+						return fatherChildren.some((fc: any) => {
+							const fcId = fc?.id || fc;
+							return String(fcId) === String(child?.id);
+						});
+					}),
+					children_mother: loadedChildren.filter((child: any) => {
+						return motherChildren.some((mc: any) => {
+							const mcId = mc?.id || mc;
+							return String(mcId) === String(child?.id);
+						});
+					}),
+					_all_children: loadedChildren,
+				};
+			} catch (err: any) {
+				console.error(`Error loading person ${personId}:`, err);
+				return { id: personIdStr, _error: err?.message || 'load_failed' };
+			}
+		}
 
 		// Try to get collection and primary key from various sources
-		const currentCollection = inject<string>('collection', null);
-		const primaryKey = inject<string | number>('primaryKey', null);
+		const currentCollection = inject<string | null>('collection', null);
+		const primaryKey = inject<string | number | null>('primaryKey', null);
 		
 		// Try to get from route if available
 		const route = instance?.appContext.config.globalProperties.$route;
@@ -214,91 +294,85 @@ export default defineComponent({
 				}
 
 				if (!itemCollection) {
-					throw new Error('No collection available. Make sure you are viewing a Person item.');
+					throw new Error('No collection available. Make sure you are viewing a Person or Family item.');
 				}
 
 				if (!itemPrimaryKey) {
-					throw new Error('No primary key available. Make sure you are viewing a Person item.');
+					throw new Error('No primary key available. Make sure you are viewing a Person or Family item.');
 				}
 
-				collection.value = itemCollection;
-
-				// Fetch the current Person with related data
-				const response = await api.get(`/items/${itemCollection}/${itemPrimaryKey}`, {
-					params: {
-						fields: [
-							'*',
-							'children_father.*',
-							'children_mother.*',
-							'married_to.*',
-						],
-					},
-				});
-
-				person.value = response.data.data;
-
-				// Merge children from both father and mother relations
-				const fatherChildren = person.value.children_father || [];
-				const motherChildren = person.value.children_mother || [];
-				
-				// Create a set to avoid duplicates
-				const childrenIds = new Set<string>();
-				const allChildren: Person[] = [];
-
-				[...fatherChildren, ...motherChildren].forEach((child: any) => {
-					const childId = typeof child === 'string' ? child : child?.id;
-					if (childId && !childrenIds.has(childId)) {
-						childrenIds.add(childId);
-						allChildren.push(typeof child === 'string' ? { id: child } : child);
-					}
-				});
-
-				// Load full details for children if they're just IDs
-				children.value = await Promise.all(
-					allChildren.map(async (child) => {
-						if (child.id && Object.keys(child).length === 1) {
-							try {
-								const childResponse = await api.get(`/items/${itemCollection}/${child.id}`, {
-									params: {
-										fields: [
-											'*',
-											'children_father.*',
-											'children_mother.*',
-											'married_to.*',
-										],
-									},
-								});
-								return childResponse.data.data;
-							} catch {
-								return child;
-							}
-						}
-						return child;
-					})
-				);
-
-				// Load spouses
-				const spouseIds = person.value.married_to || [];
-				if (spouseIds.length > 0) {
-					const spousePromises = spouseIds.map(async (spouseId: string | Person) => {
-						if (typeof spouseId === 'object' && spouseId.id && Object.keys(spouseId).length > 1) {
-							return spouseId;
-						}
-						const id = typeof spouseId === 'string' ? spouseId : spouseId?.id;
-						if (id) {
-							try {
-								const spouseResponse = await api.get(`/items/${itemCollection}/${id}`);
-								return spouseResponse.data.data;
-							} catch {
-								return typeof spouseId === 'string' ? { id: spouseId } : spouseId;
-							}
-						}
-						return spouseId;
+				// If viewing a Family item, get the source_person from it first
+				let sourcePersonId: string | number | null = null;
+				if (itemCollection === 'family') {
+					const familyResponse = await api.get(`/items/family/${itemPrimaryKey}`, {
+						params: {
+							fields: ['*', 'source_person'],
+						},
 					});
-					spouses.value = await Promise.all(spousePromises);
+					
+					const familyData = familyResponse.data.data;
+					if (familyData?.source_person) {
+						sourcePersonId = typeof familyData.source_person === 'object' 
+							? familyData.source_person.id 
+							: familyData.source_person;
+					} else {
+						throw new Error('Family item does not have a source_person set.');
+					}
 				} else {
-					spouses.value = [];
+					// If viewing a Person directly, use that person's ID
+					sourcePersonId = itemPrimaryKey;
 				}
+
+				if (!sourcePersonId) {
+					throw new Error('No source person available.');
+				}
+
+				// Create visited sets for this load to prevent infinite loops
+				const visitedPersons = new Set<string>();
+				const visitedMarriages = new Set<number>();
+
+				// Build a map of marriage IDs to persons for finding spouses
+				// Query all persons with their marriages to build this map once
+				const marriageToPersonsMap = new Map<number, any[]>();
+				try {
+					const allPersonsResponse = await api.get('/items/persons', {
+						params: {
+							fields: ['id', 'first_name', 'last_name', 'marriages.id'],
+							limit: 1000,
+						},
+					});
+					
+					const allPersons = allPersonsResponse.data.data || [];
+					
+					// Build map: marriageId -> [persons in that marriage]
+					allPersons.forEach((p: any) => {
+						const personMarriages = p.marriages || [];
+						personMarriages.forEach((m: any) => {
+							const mId = m?.id || m;
+							if (mId) {
+								const marriageId = Number(mId);
+								if (!marriageToPersonsMap.has(marriageId)) {
+									marriageToPersonsMap.set(marriageId, []);
+								}
+								marriageToPersonsMap.get(marriageId)!.push(p);
+							}
+						});
+					});
+					
+					console.log(`Built marriage map with ${marriageToPersonsMap.size} marriages`);
+				} catch (err) {
+					console.warn('Failed to build marriage map:', err);
+				}
+
+				// Recursively load the person and all their relationships
+				const person = await loadPersonRecursive(sourcePersonId, visitedPersons, visitedMarriages, marriageToPersonsMap, 0, 5);
+
+				if (!person || person._error) {
+					throw new Error('Failed to load person data.');
+				}
+
+				// Set JSON data with full recursive structure
+				jsonData.value = JSON.stringify(person, null, 2);
 			} catch (err: any) {
 				console.error('Error loading family tree:', err);
 				error.value = err?.response?.data?.errors?.[0]?.message || err.message || 'Failed to load family tree';
@@ -321,107 +395,10 @@ export default defineComponent({
 		});
 
 		return {
-			person,
 			loading,
 			error,
-			children,
-			spouses,
-			collection,
-			api,
+			jsonData,
 		};
 	},
 });
 </script>
-
-<style scoped>
-.family-tree-interface {
-	padding: 20px;
-	min-height: 200px;
-}
-
-.loading,
-.error {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	padding: 20px;
-}
-
-.error {
-	color: var(--theme--danger);
-}
-
-.tree-container {
-	width: 100%;
-}
-
-.family-node {
-	position: relative;
-	padding: 10px 0;
-}
-
-.person-card {
-	background: var(--theme--background-subdued);
-	border: 1px solid var(--theme--border-color-subdued);
-	border-radius: 8px;
-	padding: 15px;
-	margin: 10px 0;
-	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.person-name {
-	font-weight: 600;
-	font-size: 16px;
-	margin-bottom: 8px;
-	color: var(--theme--foreground);
-}
-
-.spouses {
-	font-size: 14px;
-	color: var(--theme--foreground-subdued);
-	margin-top: 8px;
-}
-
-.label {
-	font-weight: 500;
-	margin-right: 5px;
-}
-
-.children {
-	margin-left: 40px;
-	border-left: 2px solid var(--theme--border-color-subdued);
-	padding-left: 20px;
-	position: relative;
-	margin-top: 10px;
-}
-
-.children::before {
-	content: '';
-	position: absolute;
-	left: -2px;
-	top: -10px;
-	width: 2px;
-	height: 10px;
-	background: var(--theme--border-color-subdued);
-}
-
-.children::after {
-	content: '';
-	position: absolute;
-	left: -2px;
-	bottom: 0;
-	width: 2px;
-	height: 10px;
-	background: var(--theme--background);
-}
-
-.family-node:last-child .children::after {
-	display: none;
-}
-
-.family-node.level-0 .person-card {
-	background: var(--theme--primary-background);
-	border-color: var(--theme--primary);
-	border-width: 2px;
-}
-</style>
