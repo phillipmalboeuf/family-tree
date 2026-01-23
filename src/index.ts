@@ -8,5 +8,5 @@ export default defineInterface({
 	description: 'Visualize family trees with parent-child and marriage relationships',
 	component: InterfaceComponent,
 	options: null,
-	types: ['alias'],
+	types: ['uuid'],
 });
