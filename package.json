@@ -43,14 +43,15 @@
 		"dev": "directus-extension build -w --no-minify",
 		"link": "directus-extension link",
 		"validate": "directus-extension validate",
-		"prepublishOnly": "npm run build"
+		"prepublishOnly": "npm run build",
+		"test": "vite",
+		"test:build": "vite build"
 	},
 	"devDependencies": {
 		"@directus/extensions-sdk": "17.0.5",
+		"@vitejs/plugin-vue": "^5.0.0",
 		"typescript": "^5.9.3",
+		"vite": "^5.0.0",
 		"vue": "^3.5.27"
-	},
-	"dependencies": {
-		"@amcharts/amcharts5": "^5.15.3"
 	}
 }

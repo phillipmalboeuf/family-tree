@@ -1,15 +1,21 @@
 <template>
-	<pre v-if="loading">Loading...</pre>
-	<pre v-else-if="error">{{ error }}</pre>
-	<pre v-else>{{ jsonData }}</pre>
+	<div class="family-tree-interface">
+		<div v-if="loading" class="loading">Loading family tree...</div>
+		<div v-else-if="error" class="error">{{ error }}</div>
+		<FamilyTreeChart v-else-if="personData" :person-data="personData" />
+	</div>
 </template>
 
 <script lang="ts">
 import { defineComponent, ref, onMounted, watch, inject, getCurrentInstance, computed } from 'vue';
 import { useApi, useStores } from '@directus/extensions-sdk';
+import FamilyTreeChart from './FamilyTreeChart.vue';
 
 export default defineComponent({
 	name: 'FamilyTreeInterface',
+	components: {
+		FamilyTreeChart,
+	},
 	props: {
 		value: {
 			type: String,
@@ -23,7 +29,7 @@ export default defineComponent({
 		
 		const loading = ref(true);
 		const error = ref<string | null>(null);
-		const jsonData = ref<string>('');
+		const personData = ref<any>(null);
 
 		// Recursive function to load a person with all their relationships
 		async function loadPersonRecursive(
@@ -371,8 +377,8 @@ export default defineComponent({
 					throw new Error('Failed to load person data.');
 				}
 
-				// Set JSON data with full recursive structure
-				jsonData.value = JSON.stringify(person, null, 2);
+				// Store person data for chart rendering
+				personData.value = person;
 			} catch (err: any) {
 				console.error('Error loading family tree:', err);
 				error.value = err?.response?.data?.errors?.[0]?.message || err.message || 'Failed to load family tree';
@@ -397,8 +403,31 @@ export default defineComponent({
 		return {
 			loading,
 			error,
-			jsonData,
+			personData,
 		};
 	},
 });
 </script>
+
+<style scoped>
+.family-tree-interface {
+	width: 100%;
+	height: 100%;
+	min-height: 600px;
+	padding: 20px;
+}
+
+.loading,
+.error {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 40px;
+	font-size: 16px;
+}
+
+.error {
+	color: var(--theme--danger);
+}
+
+</style>
