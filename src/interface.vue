@@ -364,8 +364,6 @@ export default defineComponent({
 							}
 						});
 					});
-					
-					console.log(`Built marriage map with ${marriageToPersonsMap.size} marriages`);
 				} catch (err) {
 					console.warn('Failed to build marriage map:', err);
 				}
@@ -423,7 +421,6 @@ export default defineComponent({
 	align-items: center;
 	justify-content: center;
 	padding: 40px;
-	font-size: 16px;
 }
 
 .error {

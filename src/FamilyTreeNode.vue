@@ -2,9 +2,9 @@
 	<table class="family-tree-table" :class="'level-' + level">
 		<tr class="person-spouses-row">
 			<td class="person-cell">
-				<div class="person-card">
-					<div class="person-name">{{ getPersonName(person) }}</div>
-				</div>
+				<button class="button button-small button-secondary person-card" @click="openPersonEditor(person.id)">
+					<span class="person-name">{{ getPersonName(person) }}</span>
+				</button>
 			</td>
 			<td v-for="spouse in getSpouses(person)" :key="spouse.id" class="spouse-cell">
 				<FamilyTreeNode :person="spouse" :level="level + 1" />
@@ -25,7 +25,7 @@
 </template>
 
 <script setup lang="ts">
-import { PropType } from 'vue';
+import { PropType, getCurrentInstance } from 'vue';
 import FamilyTreeNode from './FamilyTreeNode.vue';
 
 interface Person {
@@ -116,17 +116,36 @@ function getChildren(person: Person): Person[] {
 
 	return children;
 }
+
+// Get router from app context for navigation
+const instance = getCurrentInstance();
+const globals = instance?.appContext.config.globalProperties as any;
+const router = globals?.$router;
+
+function openPersonEditor(personId: string | number) {
+	// Navigate to the item page using router
+	if (router && typeof router.push === 'function') {
+		router.push(`/content/persons/${personId}`);
+		return;
+	}
+
+	// Fallback: direct navigation (test environment / no router)
+	const basePath = window.location.pathname.split('/admin')[0] || '';
+	window.location.href = `${basePath}/admin/content/persons/${personId}`;
+}
 </script>
 
 <style scoped>
 .family-tree-table {
 	border-collapse: separate;
-  border: 1px solid;
+  border: var(--theme--border-width) solid var(--v-list-item-border-color-hover, var(--theme--form--field--input--border-color-hover));
+	border-radius: var(--theme--border-radius);
 }
 
 .person-cell {
 	text-align: center;
 	vertical-align: top;
+	padding: var(--theme--form--field--input--padding);
 }
 
 .spouses-row {
