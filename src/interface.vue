@@ -369,6 +369,10 @@ export default defineComponent({
 				}
 
 				// Recursively load the person and all their relationships
+				console.log('sourcePersonId', sourcePersonId);
+				console.log('visitedPersons', visitedPersons);
+				console.log('visitedMarriages', visitedMarriages);
+				console.log('marriageToPersonsMap', marriageToPersonsMap);
 				const person = await loadPersonRecursive(sourcePersonId, visitedPersons, visitedMarriages, marriageToPersonsMap, 0, 5);
 
 				if (!person || person._error) {
