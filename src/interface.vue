@@ -51,7 +51,7 @@ export default defineComponent({
 
 			try {
 				// Load person with basic relationships
-				const response = await api.get(`/items/persons/${personId}`, {
+				const response = await api.get(`/items/person/${personId}`, {
 					params: {
 						fields: [
 							'*',
@@ -119,7 +119,7 @@ export default defineComponent({
 							
 							// Load the spouse person data
 							if (spouseIds.length > 0) {
-								const spousesResponse = await api.get('/items/persons', {
+								const spousesResponse = await api.get('/items/person', {
 									params: {
 										filter: {
 											id: {
@@ -156,7 +156,7 @@ export default defineComponent({
 											.filter((id: any) => id && String(id) !== String(personId));
 										
 										if (spouseIds.length > 0) {
-											const spousesResponse = await api.get('/items/persons', {
+											const spousesResponse = await api.get('/items/person', {
 												params: {
 													filter: {
 														id: {
@@ -341,7 +341,7 @@ export default defineComponent({
 				// Query all persons with their marriages to build this map once
 				const marriageToPersonsMap = new Map<number, any[]>();
 				try {
-					const allPersonsResponse = await api.get('/items/persons', {
+					const allPersonsResponse = await api.get('/items/person', {
 						params: {
 							fields: ['id', 'first_name', 'last_name', 'marriages.id'],
 							limit: 1000,

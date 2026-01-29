@@ -125,13 +125,13 @@ const router = globals?.$router;
 function openPersonEditor(personId: string | number) {
 	// Navigate to the item page using router
 	if (router && typeof router.push === 'function') {
-		router.push(`/content/persons/${personId}`);
+		router.push(`/content/person/${personId}`);
 		return;
 	}
 
 	// Fallback: direct navigation (test environment / no router)
 	const basePath = window.location.pathname.split('/admin')[0] || '';
-	window.location.href = `${basePath}/admin/content/persons/${personId}`;
+	window.location.href = `${basePath}/admin/content/person/${personId}`;
 }
 </script>
 
