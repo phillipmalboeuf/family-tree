@@ -31,7 +31,7 @@ defineProps({
 <style scoped>
 .family-tree-chart {
 	width: 100%;
-	overflow-x: auto;
+	overflow: auto;
 	padding: 20px;
 }
 </style>

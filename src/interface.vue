@@ -1,8 +1,14 @@
 <template>
-	<div class="family-tree-interface">
+	<div ref="rootRef" class="family-tree-interface">
 		<div v-if="loading" class="loading">Loading family tree...</div>
 		<div v-else-if="error" class="error">{{ error }}</div>
 		<FamilyTreeChart v-else-if="personData" :person-data="personData" />
+
+		<div v-if="!loading" class="print-actions">
+			<button type="button" class="button button-secondary" @click="printPage">
+				Print Page
+			</button>
+		</div>
 	</div>
 </template>
 
@@ -30,6 +36,45 @@ export default defineComponent({
 		const loading = ref(true);
 		const error = ref<string | null>(null);
 		const personData = ref<any>(null);
+		const rootRef = ref<HTMLElement | null>(null);
+		const MAX_TREE_DEPTH = 20;
+
+		const PRINT_STYLE_ID = 'family-tree-print-style';
+
+		function printPage() {
+			const main = rootRef.value?.closest('main');
+			if (!main) return;
+
+			let style = document.getElementById(PRINT_STYLE_ID);
+			if (!style) {
+				style = document.createElement('style');
+				style.id = PRINT_STYLE_ID;
+				style.textContent = `
+					@media print {
+						body * {
+							visibility: hidden;
+						}
+						main, main * {
+							visibility: visible;
+						}
+						main {
+							position: absolute;
+							left: 0;
+							top: 0;
+							width: 100%;
+						}
+					}
+				`;
+				document.head.appendChild(style);
+			}
+
+			const cleanup = () => {
+				style?.remove();
+				window.removeEventListener('afterprint', cleanup);
+			};
+			window.addEventListener('afterprint', cleanup);
+			window.print();
+		}
 
 		// Recursive function to load a person with all their relationships
 		async function loadPersonRecursive(
@@ -38,7 +83,7 @@ export default defineComponent({
 			visitedMarriages: Set<number>,
 			marriageToPersonsMap: Map<number, any[]>,
 			depth: number = 0,
-			maxDepth: number = 5
+			maxDepth: number = MAX_TREE_DEPTH
 		): Promise<any> {
 			const personIdStr = String(personId);
 			
@@ -373,7 +418,7 @@ export default defineComponent({
 				console.log('visitedPersons', visitedPersons);
 				console.log('visitedMarriages', visitedMarriages);
 				console.log('marriageToPersonsMap', marriageToPersonsMap);
-				const person = await loadPersonRecursive(sourcePersonId, visitedPersons, visitedMarriages, marriageToPersonsMap, 0, 5);
+				const person = await loadPersonRecursive(sourcePersonId, visitedPersons, visitedMarriages, marriageToPersonsMap, 0, MAX_TREE_DEPTH);
 
 				if (!person || person._error) {
 					throw new Error('Failed to load person data.');
@@ -403,9 +448,11 @@ export default defineComponent({
 		});
 
 		return {
+			rootRef,
 			loading,
 			error,
 			personData,
+			printPage,
 		};
 	},
 });
@@ -429,6 +476,16 @@ export default defineComponent({
 
 .error {
 	color: var(--theme--danger);
+}
+
+.print-actions {
+	margin-top: 16px;
+}
+
+@media print {
+	.print-actions {
+		display: none !important;
+	}
 }
 
 </style>
