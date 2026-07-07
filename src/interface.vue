@@ -4,9 +4,9 @@
 		<div v-else-if="error" class="error">{{ error }}</div>
 		<FamilyTreeChart v-else-if="personData" :person-data="personData" />
 
-		<div v-if="!loading" class="print-actions">
-			<button type="button" class="button button-secondary" @click="printPage">
-				Print Page
+		<div v-if="!loading" ref="pdfActionsRef" class="pdf-actions">
+			<button type="button" class="button button-secondary" :disabled="downloadingPdf" @click="downloadPdf">
+				{{ downloadingPdf ? 'Generating PDF…' : 'Download PDF' }}
 			</button>
 		</div>
 	</div>
@@ -15,6 +15,7 @@
 <script lang="ts">
 import { defineComponent, ref, onMounted, watch, inject, getCurrentInstance, computed } from 'vue';
 import { useApi, useStores } from '@directus/extensions-sdk';
+import html2pdf from 'html2pdf.js';
 import FamilyTreeChart from './FamilyTreeChart.vue';
 
 export default defineComponent({
@@ -37,43 +38,36 @@ export default defineComponent({
 		const error = ref<string | null>(null);
 		const personData = ref<any>(null);
 		const rootRef = ref<HTMLElement | null>(null);
+		const pdfActionsRef = ref<HTMLElement | null>(null);
+		const downloadingPdf = ref(false);
 		const MAX_TREE_DEPTH = 20;
 
-		const PRINT_STYLE_ID = 'family-tree-print-style';
-
-		function printPage() {
+		async function downloadPdf() {
 			const main = rootRef.value?.closest('main');
-			if (!main) return;
+			if (!main || downloadingPdf.value) return;
 
-			let style = document.getElementById(PRINT_STYLE_ID);
-			if (!style) {
-				style = document.createElement('style');
-				style.id = PRINT_STYLE_ID;
-				style.textContent = `
-					@media print {
-						body * {
-							visibility: hidden;
-						}
-						main, main * {
-							visibility: visible;
-						}
-						main {
-							position: absolute;
-							left: 0;
-							top: 0;
-							width: 100%;
-						}
-					}
-				`;
-				document.head.appendChild(style);
+			downloadingPdf.value = true;
+			if (pdfActionsRef.value) {
+				pdfActionsRef.value.style.display = 'none';
 			}
 
-			const cleanup = () => {
-				style?.remove();
-				window.removeEventListener('afterprint', cleanup);
-			};
-			window.addEventListener('afterprint', cleanup);
-			window.print();
+			try {
+				await html2pdf()
+					.set({
+						margin: 10,
+						filename: 'family-tree.pdf',
+						image: { type: 'jpeg', quality: 0.98 },
+						html2canvas: { scale: 2, useCORS: true },
+						jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
+					})
+					.from(main)
+					.save();
+			} finally {
+				if (pdfActionsRef.value) {
+					pdfActionsRef.value.style.display = '';
+				}
+				downloadingPdf.value = false;
+			}
 		}
 
 		// Recursive function to load a person with all their relationships
@@ -449,10 +443,12 @@ export default defineComponent({
 
 		return {
 			rootRef,
+			pdfActionsRef,
 			loading,
 			error,
 			personData,
-			printPage,
+			downloadingPdf,
+			downloadPdf,
 		};
 	},
 });
@@ -478,14 +474,8 @@ export default defineComponent({
 	color: var(--theme--danger);
 }
 
-.print-actions {
+.pdf-actions {
 	margin-top: 16px;
-}
-
-@media print {
-	.print-actions {
-		display: none !important;
-	}
 }
 
 </style>
