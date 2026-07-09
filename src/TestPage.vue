@@ -1,14 +1,20 @@
 <template>
-	<div class="test-page">
-		<h1>Family Tree Test Page</h1>
-		<p class="test-meta">{{ generationCount }} generations (root → deepest descendant)</p>
-		<FamilyTreeChart :person-data="testData" />
+	<div class="test-page scroll-container">
+		<main>
+			<div class="content-split">
+			<h1>Family Tree Test Page</h1>
+			<p class="test-meta">{{ generationCount }} generations (root → deepest descendant)</p>
+			<FamilyTreeChart :person-data="testData" />
+			<DownloadPdf />
+		</div>
+		</main>
 	</div>
 </template>
 
 <script lang="ts">
 import { defineComponent } from 'vue';
 import FamilyTreeChart from './FamilyTreeChart.vue';
+import DownloadPdf from './DownloadPdf.vue';
 
 const GENERATION_COUNT = 20;
 
@@ -42,6 +48,7 @@ export default defineComponent({
 	name: 'TestPage',
 	components: {
 		FamilyTreeChart,
+		DownloadPdf,
 	},
 	setup() {
 		const testData = buildDeepFamilyTree(GENERATION_COUNT);
@@ -59,6 +66,14 @@ export default defineComponent({
 	padding: 20px;
 	width: 100%;
 	height: 100vh;
+}
+
+.content-split,
+.scroll-container {
+	overflow: auto;
+	block-size: 300px;
+	inline-size: 100%;
+	position: relative;
 }
 
 .test-page h1 {

@@ -1,27 +1,24 @@
 <template>
-	<div ref="rootRef" class="family-tree-interface">
+	<div class="family-tree-interface">
 		<div v-if="loading" class="loading">Loading family tree...</div>
 		<div v-else-if="error" class="error">{{ error }}</div>
 		<FamilyTreeChart v-else-if="personData" :person-data="personData" />
 
-		<div v-if="!loading" ref="pdfActionsRef" class="pdf-actions">
-			<button type="button" class="button button-secondary" :disabled="downloadingPdf" @click="downloadPdf">
-				{{ downloadingPdf ? 'Generating PDF…' : 'Download PDF' }}
-			</button>
-		</div>
+		<DownloadPdf v-if="!loading" />
 	</div>
 </template>
 
 <script lang="ts">
 import { defineComponent, ref, onMounted, watch, inject, getCurrentInstance, computed } from 'vue';
 import { useApi, useStores } from '@directus/extensions-sdk';
-import html2pdf from 'html2pdf.js';
 import FamilyTreeChart from './FamilyTreeChart.vue';
+import DownloadPdf from './DownloadPdf.vue';
 
 export default defineComponent({
 	name: 'FamilyTreeInterface',
 	components: {
 		FamilyTreeChart,
+		DownloadPdf,
 	},
 	props: {
 		value: {
@@ -37,38 +34,7 @@ export default defineComponent({
 		const loading = ref(true);
 		const error = ref<string | null>(null);
 		const personData = ref<any>(null);
-		const rootRef = ref<HTMLElement | null>(null);
-		const pdfActionsRef = ref<HTMLElement | null>(null);
-		const downloadingPdf = ref(false);
 		const MAX_TREE_DEPTH = 20;
-
-		async function downloadPdf() {
-			const main = rootRef.value?.closest('main');
-			if (!main || downloadingPdf.value) return;
-
-			downloadingPdf.value = true;
-			if (pdfActionsRef.value) {
-				pdfActionsRef.value.style.display = 'none';
-			}
-
-			try {
-				await html2pdf()
-					.set({
-						margin: 10,
-						filename: 'family-tree.pdf',
-						image: { type: 'jpeg', quality: 0.98 },
-						html2canvas: { scale: 2, useCORS: true },
-						jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
-					})
-					.from(main)
-					.save();
-			} finally {
-				if (pdfActionsRef.value) {
-					pdfActionsRef.value.style.display = '';
-				}
-				downloadingPdf.value = false;
-			}
-		}
 
 		// Recursive function to load a person with all their relationships
 		async function loadPersonRecursive(
@@ -442,13 +408,9 @@ export default defineComponent({
 		});
 
 		return {
-			rootRef,
-			pdfActionsRef,
 			loading,
 			error,
 			personData,
-			downloadingPdf,
-			downloadPdf,
 		};
 	},
 });
@@ -472,10 +434,6 @@ export default defineComponent({
 
 .error {
 	color: var(--theme--danger);
-}
-
-.pdf-actions {
-	margin-top: 16px;
 }
 
 </style>
