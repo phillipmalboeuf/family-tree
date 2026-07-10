@@ -36,7 +36,28 @@ function prepareMainForPdf(main: Element): () => void {
 		});
 	}
 
-	main.querySelectorAll<HTMLElement>('.button').forEach((button) => {
+	const familyTreeInterface = main.querySelector<HTMLElement>('.family-tree-interface');
+	if (familyTreeInterface) {
+		const previousWidth = familyTreeInterface.style.width;
+		familyTreeInterface.style.width = 'auto';
+		restores.push(() => {
+			familyTreeInterface.style.width = previousWidth;
+		});
+	}
+
+	const familyTreeChart = main.querySelector<HTMLElement>('.family-tree-chart');
+	if (familyTreeChart) {
+		const previousWidth = familyTreeChart.style.width;
+		const previousOverflow = familyTreeChart.style.overflow;
+		familyTreeChart.style.width = 'auto';
+		familyTreeChart.style.overflow = 'visible';
+		restores.push(() => {
+			familyTreeChart.style.width = previousWidth;
+			familyTreeChart.style.overflow = previousOverflow;
+		});
+	}
+
+	main.querySelectorAll<HTMLElement>('.button:not(.person-card)').forEach((button) => {
 		const previousDisplay = button.style.display;
 		button.style.display = 'none';
 		restores.push(() => {
